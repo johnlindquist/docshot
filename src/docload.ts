@@ -115,14 +115,14 @@ if (args.some(arg => helpFlags.includes(arg))) {
     }
 
     // Found the positional prompt argument
-    claudeArgs[i] = `Read the docs from ${imagesDir}. ${arg}`;
+    claudeArgs[i] = `Use the Read tool to read the documentation images, then wait for the next user's input with 'Documentation loaded. How can I help?' ${arg}`;
     foundPrompt = true;
     break;
   }
 
   // If no prompt was provided, add the default one
   if (!foundPrompt) {
-    claudeArgs.push(`Read the docs from ${imagesDir}.`);
+    claudeArgs.push(`Use the Read tool to read the documentation images, then wait for the next user's input with 'Documentation loaded. How can I help?'`);
   }
 
   // Spawn claude process

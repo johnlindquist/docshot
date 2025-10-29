@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**docshot** is a CLI tool that converts documentation into terminal-style images to reduce Claude's token usage by 56-73% while maintaining 89-97% accuracy. The tool is built with Bun and TypeScript, using @napi-rs/canvas for image generation.
+**docshot** is a CLI tool that converts documentation into terminal-style images to reduce Claude's token usage by 56-73% while maintaining 89-97% accuracy. The tool is built with Bun and TypeScript, using @napi-rs/canvas for image generation. It supports both single file and glob pattern processing for batch conversions.
 
 ## Development Commands
 
@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Development mode (uses source files directly)
 bun run dev convert <file> [options]
+bun run dev convert "docs/**/*.md"  # Glob patterns supported
 bun run dev load [dir]
 
 # Production mode (uses built files)
@@ -57,7 +58,9 @@ Use conventional commit format:
    - Main CLI entry point using Commander.js
    - Defines two commands: `convert` and `load`
    - Handles density presets (high/medium/low)
+   - Supports glob patterns for batch processing (using fast-glob)
    - Manages input validation and output directory creation
+   - Multi-file mode organizes outputs in subdirectories by file name
 
 2. **src/generator.ts** (4.0 KB)
    - Core image generation logic using @napi-rs/canvas
@@ -74,14 +77,20 @@ Use conventional commit format:
 ### Image Generation Flow
 
 ```
-Documentation File (text)
-  → Split into pages (60-100 lines per page)
-  → Render each page as terminal screenshot
-    - Dark background (rgb(30,30,30))
-    - Monospace font (Monaco, 12-16pt)
-    - Line numbers + syntax highlighting
-    - Page header with progress indicator
-  → Save as PNG files (page_001.png, page_002.png, ...)
+Documentation File(s) (text)
+  → Glob pattern matching (if pattern provided)
+    - Finds all matching files
+    - Reports count and file list
+  → For each file:
+    → Split into pages (60-100 lines per page)
+    → Render each page as terminal screenshot
+      - Dark background (rgb(30,30,30))
+      - Monospace font (Monaco, 12-16pt)
+      - Line numbers + syntax highlighting
+      - Page header with progress indicator
+    → Save as PNG files
+      - Single file: docshot/page_001.png
+      - Multi-file: docshot/{filename}/page_001.png
 ```
 
 ### Density Presets
@@ -100,13 +109,15 @@ Based on comprehensive experiments (see ../results/REPORT-CLI.md):
 
 ### Critical: Native Dependencies
 
-The build script MUST mark `@napi-rs/canvas` as external:
+The build script MUST mark native dependencies and certain packages as external:
 
 ```json
-"build": "bun build src/index.ts src/docload.ts --outdir dist --target bun --external @napi-rs/canvas --external commander"
+"build": "bun build src/index.ts src/docload.ts --outdir dist --target bun --external @napi-rs/canvas --external commander --external fast-glob"
 ```
 
-**Why:** @napi-rs/canvas uses native Node.js bindings that cannot be bundled. Bundling them causes "Failed to load native binding" errors at runtime.
+**Why:**
+- @napi-rs/canvas uses native Node.js bindings that cannot be bundled. Bundling them causes "Failed to load native binding" errors at runtime.
+- fast-glob and commander are also marked external to avoid bundling issues.
 
 ### Package Structure
 
@@ -119,6 +130,27 @@ dist/
 Both files have shebang (`#!/usr/bin/env bun`) and are executable.
 
 ## Common Development Tasks
+
+### Using Glob Patterns
+
+The tool supports glob patterns for batch processing multiple files:
+
+```bash
+# Convert all markdown files in a directory
+bun run dev convert "docs/**/*.md"
+
+# Multiple file extensions
+bun run dev convert "src/**/*.{md,txt}"
+
+# Specific paths
+bun run dev convert "guides/*.md"
+```
+
+**Key implementation details:**
+- Pattern detection: Uses `/[*?{\[\]]/` regex to detect glob patterns
+- File finding: Uses `fast-glob` library with `absolute: true` and `onlyFiles: true`
+- Output organization: Multi-file mode creates subdirectories per file (using `fileToDirectoryName()`)
+- Progress reporting: Shows `[1/N] Processing: file.md` for multi-file operations
 
 ### Adding a New Density Preset
 
@@ -168,13 +200,18 @@ When testing changes:
 
 1. **Test with dev mode first:**
    ```bash
+   # Single file
    bun run dev convert test-file.md
+
+   # Glob pattern
+   bun run dev convert "tests/**/*.md"
    ```
 
 2. **Verify build works:**
    ```bash
    bun run build
    ./dist/index.js convert test-file.md
+   ./dist/index.js convert "tests/**/*.md"
    ```
 
 3. **Check generated images:**
@@ -233,6 +270,7 @@ prompt-images/
 
 - **@napi-rs/canvas** (^0.1.81) - Native canvas implementation for Node.js (image rendering)
 - **commander** (^12.0.0) - CLI framework
+- **fast-glob** (^3.3.2) - Fast file pattern matching for glob support
 
 ### Dev Dependencies
 
