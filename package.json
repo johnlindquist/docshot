@@ -13,7 +13,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/docload.ts --outdir dist --target bun --external @napi-rs/canvas --external commander",
+    "build": "bun build src/index.ts src/docload.ts --outdir dist --target bun --external @napi-rs/canvas --external commander --external fast-glob",
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test",
@@ -31,7 +31,8 @@
   "license": "MIT",
   "dependencies": {
     "@napi-rs/canvas": "^0.1.81",
-    "commander": "^12.0.0"
+    "commander": "^12.0.0",
+    "fast-glob": "^3.3.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

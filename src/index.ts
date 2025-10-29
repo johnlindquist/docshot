@@ -2,10 +2,77 @@
 
 import { Command } from 'commander';
 import { readFileSync, mkdirSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, basename, relative, dirname } from 'path';
 import { generateImages } from './generator.js';
+import glob from 'fast-glob';
 
 const program = new Command();
+
+// Density presets (based on experiment findings)
+const densityPresets: Record<string, { linesPerPage: number; fontSize: number }> = {
+  high: { linesPerPage: 100, fontSize: 12 },
+  medium: { linesPerPage: 80, fontSize: 14 },  // ⭐ Recommended
+  low: { linesPerPage: 60, fontSize: 16 },
+};
+
+/**
+ * Check if a string contains glob pattern characters
+ */
+function isGlobPattern(str: string): boolean {
+  return /[*?{\[\]]/.test(str);
+}
+
+/**
+ * Convert a file path to a safe directory name
+ */
+function fileToDirectoryName(filePath: string): string {
+  const name = basename(filePath, '.md').replace(/[^a-zA-Z0-9-_]/g, '_');
+  return name;
+}
+
+/**
+ * Process a single documentation file
+ */
+async function processFile(
+  filePath: string,
+  outputBaseDir: string,
+  options: {
+    density: string;
+    lines?: number;
+    fontSize?: number;
+    width: string;
+    isMultiFile?: boolean;
+  }
+): Promise<void> {
+  // Read documentation
+  const content = readFileSync(filePath, 'utf8');
+  const lines = content.split('\n');
+
+  // Determine output directory
+  const outputDir = options.isMultiFile
+    ? join(outputBaseDir, fileToDirectoryName(filePath))
+    : outputBaseDir;
+
+  mkdirSync(outputDir, { recursive: true });
+
+  // Get configuration
+  const density = options.density.toLowerCase();
+  const preset = densityPresets[density] || densityPresets.medium;
+  const linesPerPage = options.lines ? parseInt(String(options.lines)) : preset.linesPerPage;
+  const fontSize = options.fontSize ? parseInt(String(options.fontSize)) : preset.fontSize;
+  const imageWidth = parseInt(options.width);
+
+  // Generate images
+  await generateImages({
+    lines,
+    outputDir,
+    linesPerPage,
+    fontSize,
+    imageWidth,
+  });
+
+  return;
+}
 
 program
   .name('docshot')
@@ -14,8 +81,8 @@ program
 
 program
   .command('convert')
-  .description('Convert a documentation file into images')
-  .argument('<file>', 'Path to the documentation file')
+  .description('Convert documentation file(s) into images (supports glob patterns)')
+  .argument('<file>', 'Path to file or glob pattern (e.g., "docs/**/*.md")')
   .option('-o, --output <dir>', 'Output directory for images', 'docshot')
   .option('-d, --density <type>', 'Image density: high, medium, or low', 'medium')
   .option('--lines <number>', 'Lines per image (overrides density preset)')
@@ -23,63 +90,80 @@ program
   .option('--width <number>', 'Image width in pixels', '1400')
   .action(async (file: string, options: any) => {
     try {
-      // Validate input file
-      const filePath = resolve(file);
-      if (!existsSync(filePath)) {
-        console.error(`❌ Error: File not found: ${filePath}`);
-        process.exit(1);
-      }
-
-      // Read documentation
-      console.log(`📖 Reading documentation from: ${filePath}`);
-      const content = readFileSync(filePath, 'utf8');
-      const lines = content.split('\n');
-      console.log(`   Lines: ${lines.length}`);
-      console.log(`   Characters: ${content.length}`);
-      console.log();
-
-      // Set up density presets (based on our experiment findings)
-      const densityPresets: Record<string, { linesPerPage: number; fontSize: number }> = {
-        high: { linesPerPage: 100, fontSize: 12 },
-        medium: { linesPerPage: 80, fontSize: 14 },  // ⭐ Recommended
-        low: { linesPerPage: 60, fontSize: 16 },
-      };
-
-      // Get configuration
+      // Validate density
       const density = options.density.toLowerCase();
       if (!['high', 'medium', 'low'].includes(density) && !options.lines) {
         console.error(`❌ Error: Invalid density '${density}'. Must be: high, medium, or low`);
         process.exit(1);
       }
 
+      const outputBaseDir = resolve(options.output);
+
+      // Check if input is a glob pattern
+      let files: string[];
+      if (isGlobPattern(file)) {
+        console.log(`🔍 Searching for files matching: ${file}`);
+        files = await glob(file, { absolute: true, onlyFiles: true });
+
+        if (files.length === 0) {
+          console.error(`❌ Error: No files found matching pattern: ${file}`);
+          process.exit(1);
+        }
+
+        console.log(`   Found ${files.length} file(s)`);
+        files.forEach(f => console.log(`   - ${relative(process.cwd(), f)}`));
+        console.log();
+      } else {
+        // Single file mode
+        const filePath = resolve(file);
+        if (!existsSync(filePath)) {
+          console.error(`❌ Error: File not found: ${filePath}`);
+          process.exit(1);
+        }
+        files = [filePath];
+      }
+
+      const isMultiFile = files.length > 1;
+
+      // Display configuration
       const preset = densityPresets[density] || densityPresets.medium;
       const linesPerPage = options.lines ? parseInt(options.lines) : preset.linesPerPage;
       const fontSize = options.fontSize ? parseInt(options.fontSize) : preset.fontSize;
-      const imageWidth = parseInt(options.width);
-
-      // Create output directory
-      const outputDir = resolve(options.output);
-      mkdirSync(outputDir, { recursive: true });
 
       console.log(`⚙️  Configuration:`);
       console.log(`   Density: ${density}${density === 'medium' ? ' ⭐ (recommended)' : ''}`);
       console.log(`   Lines per image: ${linesPerPage}`);
       console.log(`   Font size: ${fontSize}pt`);
-      console.log(`   Image width: ${imageWidth}px`);
-      console.log(`   Output directory: ${outputDir}`);
+      console.log(`   Image width: ${options.width}px`);
+      console.log(`   Output directory: ${outputBaseDir}`);
       console.log();
 
-      // Generate images
+      // Process each file
       console.log(`🖼️  Generating images...`);
-      await generateImages({
-        lines,
-        outputDir,
-        linesPerPage,
-        fontSize,
-        imageWidth,
-      });
-
       console.log();
+
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i];
+        const fileName = relative(process.cwd(), filePath);
+
+        if (isMultiFile) {
+          console.log(`[${i + 1}/${files.length}] Processing: ${fileName}`);
+        } else {
+          console.log(`📖 Processing: ${fileName}`);
+        }
+
+        const content = readFileSync(filePath, 'utf8');
+        const lines = content.split('\n');
+        console.log(`   Lines: ${lines.length}`);
+
+        await processFile(filePath, outputBaseDir, {
+          ...options,
+          isMultiFile,
+        });
+
+        console.log();
+      }
+
       console.log(`✅ Success!`);
       console.log();
       console.log(`📊 Token Savings (based on experiment results):`);
@@ -98,9 +182,10 @@ program
       console.log(`📥 Next: Load into Claude Code`);
       console.log(`   bun run dev load ${options.output}`);
       console.log();
-      console.log(`💡 Or use with Claude CLI:`);
-      console.log(`   claude --print "Your prompt here: $(ls ${outputDir}/*.png | tr '\\n' ' ')"`);
-      console.log();
+      if (isMultiFile) {
+        console.log(`💡 Files organized by name in subdirectories`);
+        console.log();
+      }
 
     } catch (error: any) {
       console.error(`❌ Error: ${error.message}`);
