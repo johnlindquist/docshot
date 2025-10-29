@@ -13,7 +13,7 @@
     "package.json"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/docload.ts --outdir dist --target bun",
+    "build": "bun build src/index.ts src/docload.ts --outdir dist --target bun --external @napi-rs/canvas --external commander",
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test",
