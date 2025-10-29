@@ -40,7 +40,7 @@ describe('convert command', () => {
 
       expect(exitCode).toBe(0);
       expect(stderr).toBe('');
-      expect(stdout).toContain('Reading documentation from:');
+      expect(stdout).toContain('Processing:');
       expect(stdout).toContain('Success!');
       expect(existsSync(outputDir)).toBe(true);
 
