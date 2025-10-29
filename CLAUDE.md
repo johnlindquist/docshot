@@ -1,166 +1,300 @@
-# docshot
+# CLAUDE.md
 
-**Reduce Claude context token usage by 56-73% with a single command**
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Purpose
+## Project Overview
 
-This tool solves a simple problem: **large documentation files consume massive amounts of tokens in Claude**.
+**docshot** is a CLI tool that converts documentation into terminal-style images to reduce Claude's token usage by 56-73% while maintaining 89-97% accuracy. The tool is built with Bun and TypeScript, using @napi-rs/canvas for image generation.
 
-When you need to provide API documentation, guides, or reference materials to Claude Code, you typically paste raw text which can use 100k+ tokens for a single documentation file. This quickly exhausts your context window and increases costs.
+## Development Commands
 
-**docshot** converts your documentation into terminal-style images, reducing token usage by **56-73%** while maintaining **89-97% accuracy**.
-
-### The Problem
+### Running the CLI
 
 ```bash
-# Traditional approach - Raw text
-claude: "Here's my 13,000 line API documentation..."
-Result: 124,580 tokens consumed 💸
+# Development mode (uses source files directly)
+bun run dev convert <file> [options]
+bun run dev load [dir]
 
-# With docshot
-docshot convert api-docs.md
-claude: [loads images]
-Result: 41,088 tokens consumed (67% savings!) ✅
+# Production mode (uses built files)
+bun run build
+./dist/index.js convert <file> [options]
+./dist/docload.js [args]
 ```
 
-## Why This Works
-
-Based on comprehensive experiments:
-
-- **Text is processed character-by-character** → High token count
-- **Images are processed visually** → Lower token count per information unit
-- Claude's vision capabilities can read text in images efficiently
-- You get the same information with a fraction of the tokens
-
-## Quick Start
+### Building
 
 ```bash
-# 1. Convert your documentation
-bun run dev convert docs/api-reference.md
+# Build for production
+bun run build
 
-# 2. Load into Claude Code (see LOADING section below)
-# The images are now in docshot/ folder
+# This compiles src/index.ts and src/docload.ts to dist/
+# IMPORTANT: Native dependencies (@napi-rs/canvas) are marked as external
+# to prevent bundling issues with native bindings
 ```
 
-## Loading Images into Claude Code
-
-### Method 1: Use the Load Helper (Recommended)
-
-After generating images, get loading instructions:
+### Testing
 
 ```bash
-bun run dev load docshot
-
-# This shows you exactly what to paste into Claude Code:
-# "Review all images in /path/to/docshot"
+bun test
 ```
 
-### Method 2: Direct Load
+### Publishing
 
-Simply reference the folder in Claude Code:
+This project uses semantic-release with conventional commits. Version bumps and releases are handled automatically via CI/CD.
+
+**DO NOT manually bump the version number in package.json.**
+
+Use conventional commit format:
+- `feat:` - New feature (minor version bump)
+- `fix:` - Bug fix (patch version bump)
+- `BREAKING CHANGE:` in commit body - Breaking change (major version bump)
+
+## Architecture
+
+### Core Components
+
+1. **src/index.ts** (5.8 KB)
+   - Main CLI entry point using Commander.js
+   - Defines two commands: `convert` and `load`
+   - Handles density presets (high/medium/low)
+   - Manages input validation and output directory creation
+
+2. **src/generator.ts** (4.0 KB)
+   - Core image generation logic using @napi-rs/canvas
+   - Terminal-style rendering with VS Code Dark+ color scheme
+   - Basic syntax highlighting for code/markdown
+   - Progress bar for multi-page generation
+
+3. **src/docload.ts** (3.7 KB)
+   - Claude CLI wrapper that auto-loads images
+   - Parses `--images` flag to find image directory
+   - Converts PNG files to `@path` references
+   - Injects image references via `--append-system-prompt`
+
+### Image Generation Flow
 
 ```
-Review all images in docshot/
+Documentation File (text)
+  → Split into pages (60-100 lines per page)
+  → Render each page as terminal screenshot
+    - Dark background (rgb(30,30,30))
+    - Monospace font (Monaco, 12-16pt)
+    - Line numbers + syntax highlighting
+    - Page header with progress indicator
+  → Save as PNG files (page_001.png, page_002.png, ...)
 ```
 
-Claude Code will automatically:
-- Find all .png files in the directory
-- Load them into the conversation
-- Use 56-73% fewer tokens than raw text!
+### Density Presets
 
-### Method 3: Specific Questions
+Based on comprehensive experiments (see ../results/REPORT-CLI.md):
 
-Be more specific about what you need:
+| Preset | Lines/Page | Font Size | Token Savings | Accuracy |
+|--------|------------|-----------|---------------|----------|
+| high   | 100        | 12pt      | 73.5%         | 91%      |
+| medium | 80         | 14pt      | 67%           | 97% ⭐   |
+| low    | 60         | 16pt      | 56%           | 89%      |
+
+**Medium is recommended** as the best balance of efficiency and accuracy.
+
+## Build Configuration
+
+### Critical: Native Dependencies
+
+The build script MUST mark `@napi-rs/canvas` as external:
+
+```json
+"build": "bun build src/index.ts src/docload.ts --outdir dist --target bun --external @napi-rs/canvas --external commander"
+```
+
+**Why:** @napi-rs/canvas uses native Node.js bindings that cannot be bundled. Bundling them causes "Failed to load native binding" errors at runtime.
+
+### Package Structure
 
 ```
-Based on the API documentation in docshot/, help me implement authentication
+dist/
+  ├── index.js      - Main CLI (docshot command)
+  └── docload.js    - Claude wrapper (docload command)
 ```
 
-```
-Explain the rate limiting strategy shown in docshot/
+Both files have shebang (`#!/usr/bin/env bun`) and are executable.
+
+## Common Development Tasks
+
+### Adding a New Density Preset
+
+Edit the `densityPresets` object in src/index.ts:
+
+```typescript
+const densityPresets: Record<string, { linesPerPage: number; fontSize: number }> = {
+  high: { linesPerPage: 100, fontSize: 12 },
+  medium: { linesPerPage: 80, fontSize: 14 },
+  low: { linesPerPage: 60, fontSize: 16 },
+  // Add new preset here
+};
 ```
 
-```
-Using the examples in docshot/, write code to handle webhooks
+### Modifying Color Scheme
+
+Edit color constants in src/generator.ts:
+
+```typescript
+const BG_COLOR = 'rgb(30, 30, 30)';
+const TEXT_COLOR = 'rgb(212, 212, 212)';
+const COMMENT_COLOR = 'rgb(106, 153, 85)';
+// etc.
 ```
 
-## Recommended Workflow
+### Improving Syntax Highlighting
 
-1. **Convert your documentation:**
+The `getLineColor()` function in src/generator.ts provides basic syntax highlighting. Extend the regex patterns to support more language features.
+
+### Adding New CLI Options
+
+Use Commander.js in src/index.ts:
+
+```typescript
+program
+  .command('convert')
+  .option('--new-option <value>', 'Description')
+  .action(async (file: string, options: any) => {
+    const newOption = options.newOption;
+    // Use the option
+  });
+```
+
+## Testing Strategy
+
+When testing changes:
+
+1. **Test with dev mode first:**
    ```bash
-   bun run dev convert docs/api-reference.md --density medium
+   bun run dev convert test-file.md
    ```
 
-2. **Keep images organized:**
+2. **Verify build works:**
    ```bash
-   # Rename output for clarity
-   bun run dev convert docs/api-reference.md --output api-images
+   bun run build
+   ./dist/index.js convert test-file.md
    ```
 
-3. **Load into Claude Code:**
+3. **Check generated images:**
+   - Open a few PNG files visually
+   - Verify line numbers are correct
+   - Check syntax highlighting
+   - Ensure page headers show correct progress
+
+4. **Test with Claude Code:**
+   ```bash
+   bun run dev load docshot
+   # Copy output and test in Claude Code conversation
    ```
-   "Review the API documentation in api-images/ and help me implement authentication"
-   ```
 
-4. **Reuse across conversations:**
-   - Images are static - generate once, use many times
-   - Reference the same image folder in multiple conversations
-   - Update images only when documentation changes
+## Troubleshooting
 
-## Results from Experiment
+### "Failed to load native binding" Error
 
-| Density | Token Savings | Accuracy | Best For |
-|---------|--------------|----------|----------|
-| **Medium ⭐** | **67%** | **97%** | **Recommended - best balance** |
-| High | 73.5% | 91% | Maximum token efficiency |
-| Low | 56% | 89% | Best readability |
+**Cause:** @napi-rs/canvas was bundled instead of being external.
 
-**Baseline:** 124,580 tokens (raw text)
-**Medium Density:** 41,088 tokens (67% reduction, 97% accuracy)
+**Fix:** Ensure build script includes `--external @napi-rs/canvas`
 
-## Use Cases
+### Images Not Loading in Claude
 
-✅ **API Documentation** - Share complete API references without token explosion
-✅ **Code Standards** - Load style guides and best practices
-✅ **Technical Specs** - Include full specifications in context
-✅ **Tutorial Content** - Provide detailed tutorials and examples
-✅ **Error Logs** - Share long error outputs efficiently
-✅ **Configuration Examples** - Include complete config files
+**Cause:** Path resolution issues.
 
-## Tips
+**Solution:** Use `bun run dev load` to get the correct path format, or use absolute paths.
 
-1. **Start with medium density** - Best balance of savings and accuracy
-2. **Generate once, use many times** - Images are reusable across conversations
-3. **Organize by topic** - Create separate image sets for different documentation areas
-4. **Update only when needed** - Regenerate images only when documentation changes
-5. **Test your use case** - Different content may work better at different densities
+### Syntax Highlighting Not Working
 
-## Performance Benefits
+The syntax highlighting is intentionally basic (performance-optimized). It only handles:
+- Comments (lines starting with # or //)
+- Common keywords (function, const, let, etc.)
+- Default text color for everything else
 
-From our experiment (13,464 lines of API documentation):
+This is by design - complex syntax highlighting would require more processing and potentially affect image generation speed.
 
-- **Token Reduction:** 67% fewer tokens (medium density)
-- **Cost Savings:** 53% lower API costs
-- **Accuracy:** 97% maintained (only 3% drop)
-- **Time:** Same or faster responses (less context to process)
+## File Organization
 
-## How It Works
-
-1. **Splits documentation** into pages (60-100 lines per page)
-2. **Generates terminal-style images** with dark theme, line numbers, syntax colors
-3. **Optimizes for Claude's vision** using proven settings from experiments
-4. **Maintains readability** while minimizing token usage
-
-## Development
-
-This tool was built based on a comprehensive experiment comparing raw text vs. images for Claude context efficiency. See `../results/REPORT-CLI.md` for full experimental details.
-
-## Next Steps
-
-Try it now:
-
-```bash
-bun run dev convert your-docs.md --density medium
+```
+prompt-images/
+├── src/
+│   ├── index.ts        - Main CLI
+│   ├── generator.ts    - Image generation
+│   └── docload.ts      - Claude wrapper
+├── dist/               - Built output
+├── CLAUDE.md          - This file
+├── README.md          - User documentation
+├── USAGE.md           - Detailed usage guide
+└── IDEAS.md           - Future enhancements
 ```
 
-Then load the generated images into Claude Code and experience the token savings firsthand!
+## Dependencies
+
+### Production Dependencies
+
+- **@napi-rs/canvas** (^0.1.81) - Native canvas implementation for Node.js (image rendering)
+- **commander** (^12.0.0) - CLI framework
+
+### Dev Dependencies
+
+- **@types/node** - TypeScript types for Node.js
+- **bun-types** - TypeScript types for Bun runtime
+- **semantic-release** - Automated versioning and package publishing
+- **@semantic-release/npm** - NPM plugin for semantic-release
+- **@semantic-release/github** - GitHub plugin for semantic-release
+- **conventional-changelog-conventionalcommits** - Conventional commits parser
+
+## Release Process
+
+This project uses semantic-release (see .releaserc.json) with automated CI/CD via GitHub Actions.
+
+### Making a Release
+
+1. **Make changes and commit using conventional format:**
+   ```bash
+   git commit -m "fix: resolve native binding bundling issue"
+   ```
+
+2. **Push to main branch:**
+   ```bash
+   git push origin main
+   ```
+
+3. **GitHub Actions automatically runs (.github/workflows/release.yml):**
+   - Checks out code
+   - Sets up Bun runtime
+   - Installs dependencies (`bun install --frozen-lockfile`)
+   - Runs tests (`bun test`)
+   - Builds the project (`bun run build`)
+   - Runs semantic-release:
+     - Analyzes commits since last release
+     - Determines version bump (major/minor/patch)
+     - Updates package.json version
+     - Generates CHANGELOG
+     - Publishes to NPM (requires NPM_TOKEN secret)
+     - Creates GitHub release
+
+**Never manually:**
+- Edit version in package.json
+- Create git tags
+- Publish to NPM
+- Run `npm publish`
+
+### CI/CD Requirements
+
+The release workflow requires two secrets:
+- **GITHUB_TOKEN** - Automatically provided by GitHub Actions
+- **NPM_TOKEN** - Must be configured in repository secrets for NPM publishing
+
+## Performance Considerations
+
+- **Image generation is I/O bound:** Canvas rendering is fast, but writing PNG files can be slow with many pages
+- **Progress bar:** Always show progress for large documents (implemented in generator.ts)
+- **Memory usage:** Each canvas is created and destroyed per page, keeping memory usage constant
+- **Parallelization:** Not implemented - pages are generated sequentially for simplicity
+
+## Related Files
+
+- **README.md** - Installation instructions and basic usage for end users
+- **USAGE.md** - Comprehensive usage guide with workflows and examples
+- **IDEAS.md** - Future feature ideas and enhancements
+- **../results/REPORT-CLI.md** - Full experimental results justifying the token savings claims
