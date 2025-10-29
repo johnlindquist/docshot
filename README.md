@@ -34,7 +34,11 @@ curl -fsSL https://bun.sh/install | bash
 **1. Convert documentation to images:**
 
 ```bash
+# Single file
 bun run dev convert path/to/documentation.md
+
+# Multiple files with glob patterns
+bun run dev convert "docs/**/*.md"
 ```
 
 This creates a `docshot` folder with your documentation split into terminal-style images.
@@ -51,6 +55,25 @@ This shows you exactly what to paste into Claude Code to load the images.
 
 ```
 Review all images in docshot/
+```
+
+### Process Multiple Files
+
+```bash
+# Convert all markdown files in a directory
+bun run dev convert "docs/**/*.md"
+
+# Convert specific patterns
+bun run dev convert "src/**/*.{md,txt}"
+
+# Files are organized in subdirectories by name
+# docshot/
+#   ├── README/
+#   │   ├── page_001.png
+#   │   └── page_002.png
+#   └── API_Guide/
+#       ├── page_001.png
+#       └── page_002.png
 ```
 
 ### Specify Output Directory
@@ -166,7 +189,7 @@ bun dist/index.js convert docs.md
 docshot convert <file> [options]
 
 Arguments:
-  file                     Path to the documentation file
+  file                     Path to file or glob pattern (e.g., "docs/**/*.md")
 
 Options:
   -o, --output <dir>       Output directory (default: "docshot")
@@ -175,6 +198,12 @@ Options:
   --font-size <number>     Font size in points (overrides density)
   --width <number>         Image width in pixels (default: "1400")
   -h, --help               Display help
+
+Examples:
+  docshot convert README.md
+  docshot convert "docs/**/*.md" --output api-docs
+  docshot convert guide.md --density high
+  docshot convert "src/**/*.{md,txt}" --lines 100
 ```
 
 ### Load Command

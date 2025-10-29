@@ -97,6 +97,34 @@ if (args.some(arg => helpFlags.includes(arg))) {
   // Add --append-system-prompt flag with image references
   claudeArgs.push('--append-system-prompt', systemPrompt);
 
+  // Find and enhance the user's prompt
+  // The positional prompt argument is the last non-flag argument
+  let foundPrompt = false;
+  for (let i = claudeArgs.length - 1; i >= 0; i--) {
+    const arg = claudeArgs[i];
+    const prevArg = i > 0 ? claudeArgs[i - 1] : null;
+
+    // Skip if this is a value for a flag (previous arg starts with --)
+    if (prevArg && prevArg.startsWith('--')) {
+      continue;
+    }
+
+    // Skip if this is a flag itself
+    if (arg.startsWith('-')) {
+      continue;
+    }
+
+    // Found the positional prompt argument
+    claudeArgs[i] = `Read the docs from ${imagesDir}. ${arg}`;
+    foundPrompt = true;
+    break;
+  }
+
+  // If no prompt was provided, add the default one
+  if (!foundPrompt) {
+    claudeArgs.push(`Read the docs from ${imagesDir}.`);
+  }
+
   // Spawn claude process
   const claudeProcess = spawn('claude', claudeArgs, {
     stdio: 'inherit',
