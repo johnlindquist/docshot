@@ -1,0 +1,34 @@
+{
+  "name": "docshot",
+  "version": "1.0.0",
+  "description": "CLI tool to convert documentation into terminal-style images for efficient Claude context usage",
+  "type": "module",
+  "bin": {
+    "docshot": "./src/index.ts",
+    "docload": "./src/docload.ts"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "keywords": [
+    "cli",
+    "documentation",
+    "images",
+    "claude",
+    "context",
+    "tokens"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.81",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "bun-types": "^1.0.0"
+  }
+}
