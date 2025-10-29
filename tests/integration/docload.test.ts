@@ -10,10 +10,26 @@ import {
 import { existsSync, writeFile } from 'fs';
 import { writeFile as writeFileAsync } from 'fs/promises';
 import { join, resolve, relative } from 'path';
+import { which } from 'bun';
+
+// Check if claude CLI is available
+async function isClaudeAvailable(): Promise<boolean> {
+  try {
+    const claudePath = await which('claude');
+    return claudePath !== null;
+  } catch {
+    return false;
+  }
+}
 
 describe('docload command', () => {
   describe('help flag handling', () => {
     it('should pass --help flag directly to claude without image loading', async () => {
+      if (!(await isClaudeAvailable())) {
+        console.log('Skipping test: claude CLI not available');
+        return;
+      }
+
       const { stdout, stderr, exitCode } = await runCommand('bun', [
         'run',
         'src/docload.ts',
@@ -29,6 +45,11 @@ describe('docload command', () => {
     });
 
     it('should pass -h flag directly to claude without image loading', async () => {
+      if (!(await isClaudeAvailable())) {
+        console.log('Skipping test: claude CLI not available');
+        return;
+      }
+
       const { stdout, stderr, exitCode } = await runCommand('bun', [
         'run',
         'src/docload.ts',

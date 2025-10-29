@@ -29,28 +29,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run tests
-        id: tests
         run: bun test
-        continue-on-error: true
-
-      - name: Fix test failures with Claude Code
-        if: steps.tests.outcome == 'failure'
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_bots: '*'
-          prompt: |
-            The tests failed because docload.ts requires the 'claude' CLI command which isn't available in CI.
-            
-            Please fix the tests in tests/integration/docload.test.ts to handle the case where the claude CLI is not available.
-            The tests that check --help and -h flags should either:
-            1. Skip when claude is not available, OR
-            2. Mock the claude command, OR  
-            3. Install claude CLI in CI, OR
-            4. Modify the tests to check for claude availability first
-            
-            Choose the best approach and implement it. After fixing, commit the changes.
-          claude_args: '--allowed-tools "Bash(bun test:*),Bash(git:*)"'
 
       - name: Build
         run: bun run build
