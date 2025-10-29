@@ -4,14 +4,20 @@
   "description": "CLI tool to convert documentation into terminal-style images for efficient Claude context usage",
   "type": "module",
   "bin": {
-    "docshot": "./src/index.ts",
-    "docload": "./src/docload.ts"
+    "docshot": "./dist/index.js",
+    "docload": "./dist/docload.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build": "bun build src/index.ts src/docload.ts --outdir dist --target bun",
     "dev": "bun run src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "cli",
@@ -29,6 +35,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "bun-types": "^1.0.0"
+    "bun-types": "^1.0.0",
+    "semantic-release": "^23.0.0",
+    "@semantic-release/npm": "^11.0.0",
+    "@semantic-release/github": "^9.0.0"
   }
 }
